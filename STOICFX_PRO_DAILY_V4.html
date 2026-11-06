@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0b1220">
+<title>STOICFX PRO DAILY V4 — Alerts & Signal Validation</title>
+<style>
+:root{--bg:#08111f;--panel:#101c2d;--panel2:#142238;--line:#263851;--txt:#e8eef7;--muted:#93a4ba;--green:#35d39a;--red:#ff6b78;--amber:#f4c46b;--blue:#70b7ff}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 20% -10%,#19304b 0,transparent 36%),var(--bg);color:var(--txt);font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Arial}
+.wrap{max-width:1400px;margin:auto;padding:20px}.top{display:flex;gap:16px;justify-content:space-between;align-items:center;flex-wrap:wrap;margin-bottom:18px}
+h1{font-size:clamp(22px,4vw,32px);letter-spacing:.04em;margin:0}.sub{color:var(--muted);margin-top:4px}
+.actions{display:flex;gap:8px;flex-wrap:wrap}button,select,input{background:#17263b;color:var(--txt);border:1px solid var(--line);border-radius:9px;padding:10px 12px;font:inherit}button{cursor:pointer}button:hover{border-color:var(--blue)}
+.statusbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:#0e1a2a;border:1px solid var(--line);padding:10px 13px;border-radius:12px;margin-bottom:15px;color:var(--muted)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--amber);display:inline-block}.dot.ok{background:var(--green)}.dot.bad{background:var(--red)}
+.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:13px}.card{background:linear-gradient(160deg,var(--panel),#0d1828);border:1px solid var(--line);border-radius:15px;padding:15px;min-width:0}
+.span12{grid-column:span 12}.span8{grid-column:span 8}.span7{grid-column:span 7}.span5{grid-column:span 5}.span4{grid-column:span 4}
+h2{font-size:15px;margin:0 0 12px;letter-spacing:.03em}.muted{color:var(--muted)}.small{font-size:12px;color:var(--muted)}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.kpi{background:var(--panel2);border:1px solid var(--line);border-radius:11px;padding:12px}.kpi b{display:block;font-size:20px;margin-top:4px}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}th,td{text-align:left;padding:9px 7px;border-bottom:1px solid #213149;white-space:nowrap}th{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.06em}td.num{text-align:right}
+.bar{height:7px;background:#26364c;border-radius:10px;overflow:hidden;min-width:65px}.bar i{display:block;height:100%;border-radius:10px;background:var(--green)}
+.pos{color:var(--green)}.neg{color:var(--red)}.neu{color:var(--muted)}.tag{display:inline-block;padding:3px 7px;border-radius:20px;background:#1b2c43;color:var(--muted);font-size:11px}
+.pairgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.pair{background:var(--panel2);border:1px solid var(--line);padding:10px;border-radius:10px}.pair strong{font-size:13px}.pair .val{float:right;font-variant-numeric:tabular-nums}
+.controls{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}.controls label{color:var(--muted);font-size:12px;display:flex;gap:6px;align-items:center}
+.notice{border-left:3px solid var(--amber);padding:9px 11px;background:#241f17;color:#e8d6ad;border-radius:5px;font-size:12px;margin-top:10px}
+.footer{margin:16px 2px 0;color:var(--muted);font-size:11px}
+.empty{text-align:center;color:var(--muted);padding:24px}
+@media(max-width:850px){.span8,.span7,.span5,.span4{grid-column:span 12}.kpis{grid-template-columns:repeat(2,1fr)}.pairgrid{grid-template-columns:repeat(2,1fr)}.wrap{padding:12px}table{font-size:12px}th,td{padding:8px 5px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+ <header class="top">
+  <div><h1>STOICFX <span style="color:var(--blue)">PRO DAILY</span></h1><div class="sub">V4 • Relative pressure • Browser alerts • Forward signal validation</div></div>
+  <div class="actions"><button id="refreshBtn">↻ Refresh now</button><button id="pauseBtn">Pause updates</button></div>
+ </header>
+ <div class="statusbar">
+  <span class="dot" id="statusDot"></span><strong id="statusText">Connecting to market data…</strong>
+  <span>·</span><span id="lastUpdate">Waiting for first quote</span>
+  <span>·</span><span id="sessionLabel">Daily reference: waiting for D1 data</span>
+ </div>
+ <section class="grid">
+  <div class="card span12">
+   <div class="kpis">
+    <div class="kpi"><span class="small">Currencies tracked</span><b>8</b><span class="small">USD · EUR · GBP · JPY · AUD · NZD · CAD · CHF</span></div>
+    <div class="kpi"><span class="small">Pairs monitored</span><b>28</b><span class="small">All unique combinations</span></div>
+    <div class="kpi"><span class="small">Data mode</span><b id="refreshRate">STREAM</b><span class="small">SignalR live ticks / REST fallback</span></div>
+    <div class="kpi"><span class="small">Data integrity</span><b id="integrity">WAITING</b><span class="small">Freshness-checked quotes only</span></div>
+   </div>
+  </div>
+  <div class="card span7">
+   <h2>Daily currency strength ranking <span class="tag">LIVE ESTIMATE</span></h2>
+   <div class="small" style="margin-bottom:8px">Score compares each currency against the other seven using current mid-price versus its provider's current D1 open. It is not an order-flow feed.</div>
+   <div style="overflow-x:auto"><table><thead><tr><th>Rank</th><th>Currency</th><th>Strength</th><th>Daily pressure</th><th>Pair breadth</th><th>Acceleration</th></tr></thead><tbody id="strengthRows"><tr><td colspan="6" class="empty">Waiting for valid live prices and D1 opens…</td></tr></tbody></table></div>
+  </div>
+  <div class="card span5">
+   <h2>Relative flow leaders</h2>
+   <div id="leaders" class="empty">Waiting for market data…</div>
+   <div class="notice">“Flow” here means inferred relative buying/selling pressure from price returns and pair breadth. Spot FX has no single consolidated tape showing all institutional capital.</div>
+  </div>
+  <div class="card span12">
+   <h2>28-pair daily confluence matrix</h2>
+   <div class="controls">
+    <label>Filter <select id="pairFilter"><option value="all">All pairs</option><option value="positive">Positive daily return</option><option value="negative">Negative daily return</option></select></label>
+    <label>Sort <select id="pairSort"><option value="move">Largest absolute move</option><option value="alpha">Alphabetical</option></select></label>
+   </div>
+   <div class="pairgrid" id="pairGrid"><div class="empty">Waiting for pair prices and daily opens…</div></div>
+  </div>
+  <div class="card span8">
+   <h2>Early pressure & rotation scanner</h2>
+   <div class="small" style="margin-bottom:8px">Acceleration compares fresh pressure readings with the reading from about one minute earlier. Live ticks stream through SignalR when available; REST polling is the fallback. Stale and closed-market quotes are excluded. It is a developing signal, not a prediction.</div>
+   <div style="overflow-x:auto"><table><thead><tr><th>Currency</th><th>Current score</th><th>1-min change</th><th>Breadth</th><th>Interpretation</th></tr></thead><tbody id="scannerRows"><tr><td colspan="5" class="empty">Collecting live samples…</td></tr></tbody></table></div>
+  </div>
+  <div class="card span4">
+   <h2>Pair direction analyser</h2>
+   <div class="controls"><label>Pair <select id="focusPair"></select></label></div>
+   <div id="pairDetail" class="empty">Select a pair</div>
+  </div>
+  <div class="card span12">
+   <h2>V4 alerts & signal validation</h2>
+   <div class="controls">
+    <button id="enableNotifications">Enable browser notifications</button>
+    <label><input type="checkbox" id="alertsEnabled" checked> Pressure alerts</label>
+    <label><input type="checkbox" id="soundEnabled"> Sound alert</label>
+    <label>Alert strength <select id="alertThreshold"><option value="65">65 / 100</option><option value="70" selected>70 / 100</option><option value="75">75 / 100</option><option value="80">80 / 100</option></select></label>
+   </div>
+   <div id="notificationStatus" class="small">Notifications are off until you grant browser permission.</div>
+   <div class="kpis" style="margin-top:10px">
+    <div class="kpi"><span class="small">Signals recorded</span><b id="journalCount">0</b></div>
+    <div class="kpi"><span class="small">Outcomes checked</span><b id="checkedCount">0</b></div>
+    <div class="kpi"><span class="small">Correct so far</span><b id="accuracyRate">—</b></div>
+    <div class="kpi"><span class="small">Validation horizon</span><b>30 min</b><span class="small">Forward observation, not a backtest</span></div>
+   </div>
+   <div class="small" style="margin:10px 0">Alerts trigger only on broad pressure (strength at/above your threshold with at least 75% breadth, or the inverse) and have a 10-minute per-currency cooldown. Signal validation records the signal and checks the currency's pressure direction after 30 minutes. This is forward observation, not historical backtesting or a guaranteed trading win rate.</div>
+   <div style="overflow-x:auto"><table><thead><tr><th>Time</th><th>Currency</th><th>Signal</th><th>Strength</th><th>30-min outcome</th></tr></thead><tbody id="journalRows"><tr><td colspan="5" class="empty">No signals recorded yet.</td></tr></tbody></table></div>
+   <button id="clearJournal" style="margin-top:10px">Clear signal journal</button>
+  </div>
+  <div class="card span12">
+   <h2>Engine settings & diagnostics</h2>
+   <div class="controls">
+    <label>REST fallback refresh <select id="pollSelect"><option value="3000">3 seconds</option><option value="5000" selected>5 seconds</option><option value="10000">10 seconds</option><option value="15000">15 seconds</option></select></label>
+    <label>D1 open refresh <select id="d1Select"><option value="120000">2 minutes</option><option value="300000" selected>5 minutes</option><option value="600000">10 minutes</option></select></label>
+   </div>
+   <div id="diagnostics" class="small">Initialising…</div>
+   <div class="notice">Freshness guard: quotes marked stale, closed, missing a timestamp, or older than 30 seconds are excluded from live strength calculations. Closed-market last prices are never labelled live. The dashboard does not generate simulated prices or use future candle data.</div>
+  </div>
+ </section>
+ <div class="footer">STOICFX PRO DAILY · Price-derived analytics, not financial advice. A strong reading is not a trade signal by itself.</div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
+<script>
+"use strict";
+const CURRENCIES=["USD","EUR","GBP","JPY","AUD","NZD","CAD","CHF"];
+const PAIRS=[];
+for(let i=0;i<CURRENCIES.length;i++) for(let j=i+1;j<CURRENCIES.length;j++) PAIRS.push(CURRENCIES[i]+CURRENCIES[j]);
+const API="https://biquote.io/api";
+const state={quotes:{},opens:{},dailyBars:{},history:[],lastQuoteAt:0,lastD1At:0,quoteTimer:null,d1Timer:null,paused:false,errors:[],pollMs:5000,d1Ms:300000,maxQuoteAgeSec:30,stream:null,streamConnected:false,lastStreamTickAt:0,restFallback:false,alertCooldown:{},journal:[],lastJournalAt:{}};
+const $=id=>document.getElementById(id);
+const fmt=(n,d=2)=>Number.isFinite(n)?n.toFixed(d):"—";
+const signClass=n=>n>0?"pos":n<0?"neg":"neu";
+const midOf=q=>{if(typeof q==="number")return q;if(!q||typeof q!=="object")return NaN;const bid=Number(q.bid??q.b??q.Bid),ask=Number(q.ask??q.a??q.Ask),last=Number(q.price??q.mid??q.rate??q.last??q.close??q.c);if(Number.isFinite(bid)&&Number.isFinite(ask)&&bid>0&&ask>0)return(bid+ask)/2;return last>0?last:NaN};
+function quoteMeta(raw){
+ const marketState=String(raw?.marketState??"unknown").toLowerCase();
+ const stamped=Date.parse(raw?.timestamp??raw?.lastQuoteAt??"");
+ const suppliedAge=Number(raw?.quoteAgeSeconds);
+ const age=Number.isFinite(suppliedAge)?suppliedAge:(Number.isFinite(stamped)?Math.max(0,(Date.now()-stamped)/1000):Infinity);
+ const staleFlag=raw?.stale===true;
+ const fresh=marketState==="open"&&!staleFlag&&Number.isFinite(age)&&age<=state.maxQuoteAgeSec&&age>=-30;
+ return {marketState,age,stale:staleFlag,fresh,timestamp:Number.isFinite(stamped)?stamped:0};
+}
+function findQuotePayload(data){
+ // BiQuote /api/latest returns a symbol-keyed object. Also tolerate an array.
+ let root=data?.data??data?.result??data?.prices??data;
+ if(Array.isArray(root)){const out={};for(const x of root){const s=String(x.symbol??x.pair??x.instrument??"").replace("/","").toUpperCase();if(s)out[s]=x;}return out;}
+ if(root&&typeof root==="object"){
+  if(root.symbols&&typeof root.symbols==="object")root=root.symbols;
+  return root;
+ }
+ return {};
+}
+function parseBars(data){
+ // BiQuote OHLC response is an envelope: {symbol, interval, bars:[...]}.
+ let a=data?.bars??data?.data?.bars??data?.result?.bars??data?.candles??data?.ohlc??data;
+ if(!Array.isArray(a)&&a&&typeof a==="object")a=a.data??a.candles??a.ohlc;
+ if(!Array.isArray(a))return [];
+ return a.map(x=>({open:Number(x.open??x.o??x.Open),time:Date.parse(x.openTime??x.time??x.timestamp??x.t??x.date??"")||0,isOpen:x.isOpen===true}))
+ .filter(x=>x.open>0);
+}
+async function getJson(url){
+ const ctrl=new AbortController();const t=setTimeout(()=>ctrl.abort(),12000);
+ try{const r=await fetch(url,{cache:"no-store",signal:ctrl.signal,headers:{"Accept":"application/json"}});if(!r.ok)throw new Error("HTTP "+r.status);return await r.json();}
+ finally{clearTimeout(t)}
+}
+function quoteUrl(){
+ // BiQuote requires repeated symbols parameters; comma-separated symbols are not supported.
+ const params=new URLSearchParams();
+ for(const p of PAIRS)params.append("symbols",p);
+ return API+"/latest?"+params.toString();
+}
+async function loadQuotes(){
+ const data=await getJson(quoteUrl());const payload=findQuotePayload(data);const next={};
+ for(const p of PAIRS){const raw=payload[p]??payload[p.slice(0,3)+"/"+p.slice(3)]??payload[p.toLowerCase()];const m=midOf(raw);if(m>0)next[p]={mid:m,raw,meta:quoteMeta(raw)};}
+ if(Object.keys(next).length<20)throw new Error("Provider returned only "+Object.keys(next).length+"/28 usable pair quotes. Check API response format.");
+ state.quotes=next;state.lastQuoteAt=Date.now();state.errors=[];
+}
+async function loadDailyOpens(){
+ const results=await Promise.allSettled(PAIRS.map(async p=>{
+  const data=await getJson(API+"/"+p+"/ohlc?interval=1d&limit=2");
+  const bars=parseBars(data);if(!bars.length)throw new Error(p+" has no usable D1 candles");
+  // BiQuote places the current unfinished candle first and marks it isOpen:true.
+  const current=bars.find(b=>b.isOpen)??bars.reduce((latest,b)=>b.time>latest.time?b:latest,bars[0]);
+  return[p,{open:current.open,time:current.time}];
+ }));
+ const fresh={};const failed=[];
+ results.forEach((r,i)=>{if(r.status==="fulfilled")fresh[r.value[0]]=r.value[1];else failed.push(PAIRS[i]);});
+ if(Object.keys(fresh).length<20)throw new Error("Only "+Object.keys(fresh).length+"/28 daily opens available. Missing: "+failed.join(", "));
+ state.opens=fresh;state.lastD1At=Date.now();state.dailyBars=fresh;
+}
+function pairReturn(p){
+ const q=state.quotes[p],o=state.opens[p];if(!q||!q.meta?.fresh||!o||!o.open)return NaN;
+ return Math.log(q.mid/o.open)*10000;
+}
+function calculate(){
+ const contributions=Object.fromEntries(CURRENCIES.map(c=>[c,[]]));
+ for(const p of PAIRS){const r=pairReturn(p);if(!Number.isFinite(r))continue;const base=p.slice(0,3),quote=p.slice(3);contributions[base].push(r);contributions[quote].push(-r);}
+ const rows=CURRENCIES.map(c=>{
+  const a=contributions[c],mean=a.length?a.reduce((s,x)=>s+x,0)/a.length:NaN;
+  const breadth=a.length?a.filter(x=>x>0).length/a.length*100:NaN;
+  // Bounded display score; raw pressure remains available separately.
+  const score=Number.isFinite(mean)?50+45*Math.tanh(mean/18):NaN;
+  return{currency:c,score,pressure:mean,breadth,count:a.length};
+ }).sort((a,b)=>(b.score||0)-(a.score||0));
+ const now=Date.now();state.history.push({t:now,rows:rows.map(x=>({currency:x.currency,score:x.score,pressure:x.pressure,breadth:x.breadth}))});
+ state.history=state.history.filter(x=>now-x.t<15*60*1000);
+ const old=state.history.find(x=>now-x.t>=55000);
+ return rows.map(r=>{const prev=old?.rows.find(x=>x.currency===r.currency);return{...r,accel:prev&&Number.isFinite(prev.pressure)?r.pressure-prev.pressure:NaN};});
+}
+const JOURNAL_KEY="stoicfx_v4_signal_journal";
+function loadJournal(){
+ try{state.journal=JSON.parse(localStorage.getItem(JOURNAL_KEY)||"[]");if(!Array.isArray(state.journal))state.journal=[];}catch(e){state.journal=[];}
+}
+function saveJournal(){try{localStorage.setItem(JOURNAL_KEY,JSON.stringify(state.journal.slice(-300)));}catch(e){}}
+function playAlertTone(){
+ if(!$("soundEnabled").checked)return;
+ try{const Ctx=window.AudioContext||window.webkitAudioContext;if(!Ctx)return;const ctx=new Ctx(),osc=ctx.createOscillator(),gain=ctx.createGain();osc.type="sine";osc.frequency.value=880;gain.gain.value=.06;osc.connect(gain);gain.connect(ctx.destination);osc.start();osc.stop(ctx.currentTime+.18);osc.onended=()=>ctx.close();}catch(e){}
+}
+function notifySignal(r, direction){
+ const key=r.currency+":"+direction,now=Date.now(),last=state.alertCooldown[key]||0;
+ if(now-last<10*60*1000)return;
+ state.alertCooldown[key]=now;
+ const title=`STOICFX: ${r.currency} ${direction} pressure`;
+ const body=`Strength ${fmt(r.score,1)}/100 · Breadth ${fmt(r.breadth,0)}% · Pressure ${fmt(r.pressure,2)} bp. Price-derived estimate, not a trade instruction.`;
+ if("Notification" in window && Notification.permission==="granted"){
+  try{new Notification(title,{body,tag:"stoicfx-"+key});}catch(e){}
+ }
+ playAlertTone();
+}
+function updateJournal(rows){
+ const now=Date.now();
+ for(const r of rows){
+  if(!Number.isFinite(r.score)||!Number.isFinite(r.pressure))continue;
+  const direction=r.score>=Number($("alertThreshold").value)&&r.breadth>=75&&r.pressure>0?"Bullish breadth":
+   r.score<=(100-Number($("alertThreshold").value))&&r.breadth<=25&&r.pressure<0?"Bearish breadth":null;
+  if(!direction)continue;
+  const previous=state.lastJournalAt[r.currency]||0;
+  if(now-previous<10*60*1000)continue;
+  state.lastJournalAt[r.currency]=now;
+  state.journal.push({t:now,currency:r.currency,direction,score:r.score,pressure:r.pressure,breadth:r.breadth,checked:false,outcome:"Pending"});
+  if($("alertsEnabled").checked)notifySignal(r,direction);
+ }
+ // Check signal direction after 30 minutes using latest pressure snapshot.
+ state.journal.forEach(item=>{
+  if(!item.checked&&now-item.t>=30*60*1000){
+   const latest=rows.find(r=>r.currency===item.currency);
+   if(latest&&Number.isFinite(latest.pressure)){
+    item.checked=true;
+    item.outcome=(item.direction==="Bullish breadth"?latest.pressure>item.pressure:latest.pressure<item.pressure)?"Pressure continued":"Pressure did not continue";
+    item.correct=item.outcome==="Pressure continued";
+   }
+  }
+ });
+ saveJournal();renderJournal();
+}
+function renderJournal(){
+ const checked=state.journal.filter(x=>x.checked),correct=checked.filter(x=>x.correct).length;
+ $("journalCount").textContent=state.journal.length;
+ $("checkedCount").textContent=checked.length;
+ $("accuracyRate").textContent=checked.length?Math.round(correct/checked.length*100)+"%":"—";
+ const recent=state.journal.slice(-12).reverse();
+ $("journalRows").innerHTML=recent.map(x=>`<tr><td>${new Date(x.t).toLocaleTimeString()}</td><td><b>${x.currency}</b></td><td>${x.direction}</td><td>${fmt(x.score,1)}</td><td>${x.outcome}</td></tr>`).join("")||'<tr><td colspan="5" class="empty">No signals recorded yet.</td></tr>';
+}
+
+function render(){
+ const rows=calculate();
+ updateJournal(rows);
+ $("strengthRows").innerHTML=rows.map((r,i)=>`<tr><td>${i+1}</td><td><strong>${r.currency}</strong></td><td class="num ${signClass(r.score-50)}">${fmt(r.score,1)}/100</td><td class="num ${signClass(r.pressure)}">${fmt(r.pressure,2)} bp</td><td><div class="bar"><i style="width:${Math.max(0,Math.min(100,r.breadth||0))}%;background:${(r.breadth||0)>=50?"var(--green)":"var(--red)"}"></i></div><span class="small">${fmt(r.breadth,0)}%</span></td><td class="num ${signClass(r.accel)}">${Number.isFinite(r.accel)?(r.accel>0?"+":"")+fmt(r.accel,2)+" bp":"Collecting…"}</td></tr>`).join("");
+ const leaders=[...rows].filter(r=>Number.isFinite(r.score));
+ $("leaders").innerHTML=leaders.length?leaders.slice(0,3).map((r,i)=>`<div style="padding:10px 0;border-bottom:1px solid var(--line)"><div style="display:flex;justify-content:space-between"><strong>${i+1}. ${r.currency}</strong><b class="${signClass(r.pressure)}">${fmt(r.score,1)}/100</b></div><div class="small">${r.pressure>=0?"Net positive relative pressure":"Net negative relative pressure"} · breadth ${fmt(r.breadth,0)}%</div></div>`).join(""):"No valid readings";
+ $("scannerRows").innerHTML=rows.map(r=>`<tr><td><b>${r.currency}</b></td><td class="${signClass(r.score-50)}">${fmt(r.score,1)}</td><td class="${signClass(r.accel)}">${Number.isFinite(r.accel)?(r.accel>0?"+":"")+fmt(r.accel,2)+" bp":"Collecting…"}</td><td>${fmt(r.breadth,0)}%</td><td>${interpret(r)}</td></tr>`).join("");
+ renderPairs();renderFocus();
+ const freshCount=Object.values(state.quotes).filter(q=>q.meta?.fresh).length;
+ const closedCount=Object.values(state.quotes).filter(q=>q.meta?.marketState==="closed").length;
+ $("integrity").textContent=freshCount>=20&&Object.keys(state.opens).length>=20?"LIVE":closedCount>=20?"CLOSED":"PARTIAL";
+ $("lastUpdate").textContent="Last quote batch: "+new Date(state.lastQuoteAt).toLocaleTimeString();
+ $("sessionLabel").textContent="Fresh quotes: "+freshCount+"/28 · D1 opens: "+Object.keys(state.opens).length+"/28";
+}
+function interpret(r){if(!Number.isFinite(r.score))return"Insufficient data";if(r.breadth>=75&&r.pressure>0)return"Broad positive pressure";if(r.breadth<=25&&r.pressure<0)return"Broad negative pressure";if(r.accel>1.5)return"Pressure accelerating";if(r.accel< -1.5)return"Pressure fading";return"Mixed / developing";}
+function renderPairs(){
+ let list=PAIRS.map(p=>({p,r:pairReturn(p)})).filter(x=>Number.isFinite(x.r));
+ const f=$("pairFilter").value;if(f==="positive")list=list.filter(x=>x.r>0);if(f==="negative")list=list.filter(x=>x.r<0);
+ if($("pairSort").value==="alpha")list.sort((a,b)=>a.p.localeCompare(b.p));else list.sort((a,b)=>Math.abs(b.r)-Math.abs(a.r));
+ $("pairGrid").innerHTML=list.map(x=>`<div class="pair"><strong>${x.p}</strong><span class="val ${signClass(x.r)}">${x.r>0?"+":""}${fmt(x.r,2)} bp</span><div class="small" style="margin-top:6px">${x.r>0?"Base outperforming quote":x.r<0?"Quote outperforming base":"Flat"} · Fresh quote</div></div>`).join("")||'<div class="empty">No fresh pairs available (market closed or feed stale)</div>';
+}
+function renderFocus(){
+ const p=$("focusPair").value;if(!p)return;const r=pairReturn(p),q=state.quotes[p],o=state.opens[p];
+ const meta=q?.meta;const quoteState=meta?.fresh?(state.streamConnected?"LIVE STREAM":"LIVE — REST SNAPSHOT"):meta?.marketState==="closed"?"MARKET CLOSED — LAST PRICE":"STALE / UNVERIFIED";
+ const age=Number.isFinite(meta?.age)?Math.round(meta.age)+" sec old":"age unavailable";
+ $("pairDetail").innerHTML=q&&o?`<div style="font-size:25px;font-weight:700">${p}</div><div class="tag">${quoteState}</div><div class="${signClass(r)}" style="font-size:24px;margin:7px 0">${Number.isFinite(r)?(r>0?"+":"")+fmt(r,2)+" bp":"—"}</div><div class="small">Current mid: ${fmt(q.mid,5)}<br>Quote age: ${age}<br>D1 open: ${fmt(o.open,5)}<br>${Number.isFinite(r)?`Base ${p.slice(0,3)} ${r>0?"outperforming":"underperforming"} quote ${p.slice(3)}`:"Excluded from live strength calculation"}<br>Daily reference timestamp: ${o.time?new Date(o.time<1e12?o.time*1000:o.time).toLocaleString():"Provider timestamp unavailable"}</div>`:"Pair data unavailable";
+}
+function setStatus(ok,msg){$("statusDot").className="dot "+(ok?"ok":"bad");$("statusText").textContent=msg;}
+async function refreshAll(){
+ if(state.paused)return;
+ try{
+  await loadQuotes();
+  if(!state.lastD1At||Date.now()-state.lastD1At>=state.d1Ms)await loadDailyOpens();
+  const freshCount=Object.values(state.quotes).filter(q=>q.meta?.fresh).length;
+  const closedCount=Object.values(state.quotes).filter(q=>q.meta?.marketState==="closed").length;
+  if(freshCount>=20)setStatus(true,state.streamConnected?"Live SignalR stream connected — freshness guard active":"Live REST quotes verified — stream unavailable");
+  else if(closedCount>=20)setStatus(false,"Market closed — last prices are not treated as live");
+  else setStatus(false,"Partial feed — only "+freshCount+" fresh quotes verified");
+  render();
+  $("diagnostics").textContent=`Quotes received: ${Object.keys(state.quotes).length}/28 · Fresh: ${freshCount}/28 · Closed: ${closedCount}/28 · Max allowed quote age: ${state.maxQuoteAgeSec}s · D1 opens: ${Object.keys(state.opens).length}/28 · Last batch: ${new Date(state.lastQuoteAt).toLocaleString()}`;
+ }catch(e){setStatus(false,"Data issue — no fabricated readings");$("integrity").textContent="ERROR";$("diagnostics").textContent="Error: "+e.message+" · Check internet access, provider availability, CORS permissions and response schema.";console.error(e);}
+}
+function startTimers(){clearInterval(state.quoteTimer);clearInterval(state.d1Timer);state.quoteTimer=setInterval(()=>{if(state.streamConnected&&state.lastStreamTickAt&&Date.now()-state.lastStreamTickAt>30000){state.streamConnected=false;setStatus(false,'No stream ticks for 30 seconds — REST fallback active');}if(!state.streamConnected&&!state.paused)refreshAll();},state.pollMs);state.d1Timer=setInterval(async()=>{if(!state.paused){try{await loadDailyOpens();render();}catch(e){$("diagnostics").textContent="D1 refresh issue: "+e.message;}}},state.d1Ms);}
+async function startLiveStream(){
+ if(!window.signalR){state.restFallback=true;$('diagnostics').textContent='SignalR library unavailable; using REST snapshot fallback.';return;}
+ try{
+  const conn=new signalR.HubConnectionBuilder().withUrl('https://biquote.io/hubs/tick').withAutomaticReconnect().build();
+  conn.on('ReceiveTick',tick=>{
+   if(!tick||!tick.symbol||!PAIRS.includes(String(tick.symbol).toUpperCase()))return;
+   const symbol=String(tick.symbol).toUpperCase();const mid=midOf(tick);if(!(mid>0))return;
+   const raw={...tick};if(!raw.timestamp&&raw.time)raw.timestamp=raw.time;if(!raw.marketState)raw.marketState='open';
+   const meta=quoteMeta(raw);state.quotes[symbol]={mid,raw,meta};state.lastQuoteAt=Date.now();state.lastStreamTickAt=Date.now();
+   if(Object.keys(state.quotes).length>=20){state.streamConnected=true;state.restFallback=false;setStatus(true,'Live SignalR stream connected — freshness guard active');render();
+    $('diagnostics').textContent=`Mode: SignalR tick stream · Symbols subscribed: 28 · Fresh quotes: ${Object.values(state.quotes).filter(q=>q.meta?.fresh).length}/28 · Max quote age: ${state.maxQuoteAgeSec}s · Last tick received: ${new Date(state.lastStreamTickAt).toLocaleTimeString()}`;
+   }
+  });
+  conn.onreconnecting(()=>{state.streamConnected=false;setStatus(false,'Stream reconnecting — REST fallback active');});
+  conn.onreconnected(async()=>{try{await conn.invoke('Subscribe',PAIRS);state.streamConnected=true;setStatus(true,'Live SignalR stream reconnected');}catch(e){state.streamConnected=false;}});
+  await conn.start();await conn.invoke('Subscribe',PAIRS);state.stream=conn;state.streamConnected=true;state.restFallback=false;
+  setStatus(true,'SignalR connected — waiting for live ticks');
+ }catch(e){state.streamConnected=false;state.restFallback=true;setStatus(false,'Live stream unavailable — REST fallback active');$('diagnostics').textContent='SignalR connection failed: '+e.message+' · REST polling will continue.';}
+}
+$("refreshBtn").onclick=refreshAll;
+$("pauseBtn").onclick=()=>{state.paused=!state.paused;$("pauseBtn").textContent=state.paused?"Resume updates":"Pause updates";if(!state.paused)refreshAll();};
+$("pollSelect").onchange=e=>{state.pollMs=Number(e.target.value);$("refreshRate").textContent=state.streamConnected?"STREAM":"REST FALLBACK";startTimers();};
+$("d1Select").onchange=e=>{state.d1Ms=Number(e.target.value);startTimers();};
+$("pairFilter").onchange=renderPairs;$("pairSort").onchange=renderPairs;$("focusPair").onchange=renderFocus;
+$("focusPair").innerHTML=PAIRS.map(p=>`<option>${p}</option>`).join("");
+$("refreshRate").textContent=state.streamConnected?"STREAM":"REST FALLBACK";
+loadJournal();renderJournal();
+$("enableNotifications").onclick=async()=>{
+ if(!("Notification" in window)){$("notificationStatus").textContent="This browser does not support desktop notifications.";return;}
+ try{const p=await Notification.requestPermission();$("notificationStatus").textContent=p==="granted"?"Notifications enabled. Keep Chrome notifications allowed in Android settings.":p==="denied"?"Notifications blocked. Change Chrome site notification permission in Android settings.":"Permission not granted.";}catch(e){$("notificationStatus").textContent="Could not request notification permission: "+e.message;}
+};
+$("alertsEnabled").onchange=()=>{$("notificationStatus").textContent=$("alertsEnabled").checked?"Pressure alerts enabled when browser permission is granted.":"Pressure alerts paused.";};
+$("clearJournal").onclick=()=>{if(confirm("Clear all locally saved STOICFX signal records?")){state.journal=[];state.lastJournalAt={};saveJournal();renderJournal();}};
+refreshAll();startTimers();startLiveStream();
+</script>
+</body></html>
